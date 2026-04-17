@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NFT Minter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --border: #2a2a3a;
+      --accent: #00ffcc;
+      --accent2: #7b61ff;
+      --warn: #ff6b6b;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --success: #00e5a0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(123,97,255,0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 20%, rgba(0,255,204,0.06) 0%, transparent 50%);
+    }
+
+    .container { max-width: 560px; margin: 0 auto; }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle { color: var(--muted); font-size: 0.85rem; font-family: 'Space Mono', monospace; margin-bottom: 32px; }
+
+    /* STEPS INDICATOR */
+    .steps {
+      display: flex;
+      margin-bottom: 32px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .step {
+      flex: 1;
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 0.75rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      transition: all 0.3s;
+      position: relative;
+    }
+
+    .step:last-child { border-right: none; }
+    .step .step-num { display: block; font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
+    .step.active { color: var(--accent); background: rgba(0,255,204,0.05); }
+    .step.done { color: var(--success); background: rgba(0,229,160,0.05); }
+    .step.done::after { content: '✓'; position: absolute; top: 6px; right: 8px; font-size: 0.7rem; color: var(--success); }
+
+    /* CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      transition: border-color 0.3s, opacity 0.3s;
+    }
+
+    .card.active-card { border-color: rgba(0,255,204,0.3); }
+    .card.disabled-card { opacity: 0.4; pointer-events: none; }
+
+    .card-title {
+      font-size: 0.7rem;
+      font-family: 'Space Mono', monospace;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      background: rgba(0,255,204,0.1);
+      border: 1px solid rgba(0,255,204,0.2);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.65rem;
+    }
+
+    .badge.done-badge { background: rgba(0,229,160,0.1); border-color: rgba(0,229,160,0.2); color: var(--success); }
+
+    /* INPUTS */
+    label { display: block; font-size: 0.72rem; font-family: 'Space Mono', monospace; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.05em; }
+
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.82rem;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus { border-color: var(--accent2); }
+    input[type="file"] { padding: 10px 14px; cursor: pointer; color: var(--muted); }
+
+    #imagePreview { display: none; width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 14px; border: 1px solid var(--border); }
+
+    /* BUTTONS */
+    .btn { width: 100%; padding: 13px; border: none; border-radius: 10px; font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
+
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a0a0f; }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,255,204,0.25); }
+
+    .btn-danger { background: transparent; border: 1px solid var(--warn); color: var(--warn); margin-top: 8px; }
+    .btn-danger:hover:not(:disabled) { background: rgba(255,107,107,0.1); }
+
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+
+    /* WALLET BAR */
+    .wallet-bar { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-family: 'Space Mono', monospace; font-size: 0.75rem; }
+    .wallet-status { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+    .dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    #walletAddr { color: var(--muted); }
+
+    .btn-connect { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.72rem; padding: 5px 12px; cursor: pointer; transition: all 0.2s; }
+    .btn-connect:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* STATUS BOX */
+    .status-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--muted); margin-top: 12px; min-height: 40px; white-space: pre-line; word-break: break-all; line-height: 1.6; display: none; }
+    .status-box.visible { display: block; }
+    .status-box.error { border-color: rgba(255,107,107,0.4); color: var(--warn); }
+    .status-box.success { border-color: rgba(0,229,160,0.4); color: var(--success); }
+    .status-box.info { border-color: rgba(0,255,204,0.2); color: var(--accent); }
+
+    /* STORED DATA PREVIEW */
+    .stored-preview { background: var(--bg); border: 1px solid rgba(0,229,160,0.2); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--success); line-height: 1.8; }
+    .stored-preview span { color: var(--muted); }
+
+    /* CONTRACT CHECK */
+    .contract-check { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-family: 'Space Mono', monospace; font-size: 0.72rem; }
+    .check-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .check-row:last-child { border-bottom: none; }
+    .check-label { color: var(--muted); }
+    .check-val { color: var(--text); }
+    .check-val.ok { color: var(--success); }
+    .check-val.fail { color: var(--warn); }
+
+    /* SPINNER */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,255,204,0.2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>NFT Minter</h1>
+  <p class="subtitle">ERC-721 · IPFS · Pinata · On-Chain</p>
+
+  <!-- STEP INDICATOR -->
+  <div class="steps">
+    <div class="step active" id="step1"><span class="step-num">01</span>UPLOAD</div>
+    <div class="step" id="step2"><span class="step-num">02</span>VERIFY</div>
+    <div class="step" id="step3"><span class="step-num">03</span>MINT</div>
+  </div>
+
+  <!-- WALLET BAR -->
+  <div class="wallet-bar">
+    <div class="wallet-status">
+      <div class="dot" id="walletDot"></div>
+      <span id="walletAddr">No wallet connected</span>
+    </div>
+    <button class="btn-connect" id="connectBtn">Connect MetaMask</button>
+  </div>
+
+  <!-- ═══════════════════════════════════ -->
+  <!-- CARD 1: PINATA UPLOAD              -->
+  <!-- ═══════════════════════════════════ -->
+  <div class="card active-card" id="uploadCard">
+    <div class="card-title">
+      <span>01 — Upload to IPFS</span>
+      <span class="badge" id="uploadBadge">PENDING</span>
+    </div>
+
+    <label>NFT IMAGE</label>
+    <input type="file" id="imageInput" accept="image/*" />
+    <img id="imagePreview" alt="Preview" />
+
+    <label>NFT NAME</label>
+    <input type="text" id="nftName" placeholder="e.g. Cool Ape #1" />
+
+    <label>DESCRIPTION</label>
+    <input type="text" id="nftDesc" placeholder="e.g. My first NFT" />
+
+    <button class="btn btn-primary" id="uploadBtn">Upload to IPFS via Pinata</button>
+    <div class="status-box" id="uploadStatus"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════ -->
+  <!-- CARD 2: STORED DATA VERIFY         -->
+  <!-- ═══════════════════════════════════ -->
+  <div class="card disabled-card" id="verifyCard">
+    <div class="card-title">
+      <span>02 — Stored IPFS Data</span>
+      <span class="badge" id="verifyBadge">WAITING</span>
+    </div>
+    <div id="storedDataPreview"></div>
+    <button class="btn btn-danger" id="clearBtn" style="display:none">Clear &amp; Re-upload</button>
+  </div>
+
+  <!-- ═══════════════════════════════════ -->
+  <!-- CARD 3: MINT                        -->
+  <!-- ═══════════════════════════════════ -->
+  <div class="card disabled-card" id="mintCard">
+    <div class="card-title">
+      <span>03 — Mint on Blockchain</span>
+      <span class="badge" id="mintBadge">LOCKED</span>
+    </div>
+
+    <!-- Pre-mint checklist — all must be green before mint runs -->
+    <div class="contract-check">
+      <div class="check-row">
+        <span class="check-label">Wallet Connected</span>
+        <span class="check-val fail" id="chkWallet">✗ Not connected</span>
+      </div>
+      <div class="check-row">
+        <span class="check-label">Contract Address</span>
+        <span class="check-val fail" id="chkAddress">✗ Not loaded</span>
+      </div>
+      <div class="check-row">
+        <span class="check-label">Contract ABI</span>
+        <span class="check-val fail" id="chkABI">✗ Not loaded</span>
+      </div>
+      <div class="check-row">
+        <span class="check-label">ERC-721 Verified</span>
+        <span class="check-val fail" id="chkERC721">✗ Not verified</span>
+      </div>
+      <div class="check-row">
+        <span class="check-label">IPFS Data Ready</span>
+        <span class="check-val fail" id="chkIPFS">✗ Upload first</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="mintBtn" disabled>Mint NFT on Blockchain</button>
+    <div class="status-box" id="mintStatus"></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.7.0/dist/ethers.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  // ─── CONFIG ───
+  var BACKEND_URL = 'http://localhost:3001/api';
+  var LS_KEY      = 'nft_ipfs_data'; // localStorage key name
+
+  // ─── State variables ───
+  var userSigner      = null;
+  var userAddress     = null;
+  var isConnected     = false;
+  var contractAddress = null;
+  var contractABI     = null;
+  var isERC721Valid   = false;
+
+  // ─── Get DOM elements ───
+  var connectBtn  = document.getElementById('connectBtn');
+  var uploadBtn   = document.getElementById('uploadBtn');
+  var clearBtn    = document.getElementById('clearBtn');
+  var mintBtn     = document.getElementById('mintBtn');
+  var imageInput  = document.getElementById('imageInput');
+
+  // ─── Attach events (never use inline onclick) ───
+  connectBtn.addEventListener('click', connectWallet);
+  uploadBtn.addEventListener('click', uploadToPinata);
+  clearBtn.addEventListener('click', clearStoredData);
+  mintBtn.addEventListener('click', mintNFT);
+  imageInput.addEventListener('change', previewImage);
+
+  // ─── On load: fetch config, restore localStorage, check wallet ───
+  loadConfig();
+  restoreFromLocalStorage();
+  checkExistingWallet();
+
+  // ═══════════════════════════════════════════
+  // LOAD CONFIG — fetch contract address + ABI
+  // from backend (which reads .env securely)
+  // ═══════════════════════════════════════════
+  async function loadConfig() {
+    try {
+      var res  = await fetch(BACKEND_URL + '/config');
+      var data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      contractAddress = data.contractAddress;
+      contractABI     = data.contractABI;
+
+      updateChecks();
+    } catch (err) {
+      console.warn('Config load failed:', err.message);
+      setCheck('chkAddress', false, '✗ Backend not running');
+      setCheck('chkABI',     false, '✗ Backend not running');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // IMAGE PREVIEW
+  // ═══════════════════════════════════════════
+  function previewImage() {
+    var file    = imageInput.files[0];
+    var preview = document.getElementById('imagePreview');
+    if (!file) return;
+    preview.src          = URL.createObjectURL(file);
+    preview.style.display = 'block';
+  }
+
+  // ═══════════════════════════════════════════
+  // STEP 1: UPLOAD TO PINATA (independent of wallet)
+  // WHY separate? User can upload image first,
+  // then connect wallet and mint later.
+  // tokenURI stored in localStorage bridges the two steps.
+  // ═══════════════════════════════════════════
+  async function uploadToPinata() {
+    var imageFile = imageInput.files[0];
+    var name      = document.getElementById('nftName').value.trim();
+    var desc      = document.getElementById('nftDesc').value.trim();
+
+    if (!imageFile) return showStatus('uploadStatus', 'error', '✗ Please select an image');
+    if (!name)      return showStatus('uploadStatus', 'error', '✗ Please enter NFT name');
+
+    uploadBtn.disabled    = true;
+    uploadBtn.innerHTML   = '<span class="spinner"></span>Uploading image...';
+    showStatus('uploadStatus', 'info', '📤 Step 1/2: Uploading image to IPFS...');
+
+    try {
+      // ── A: Upload image file ──
+      var formData = new FormData();
+      formData.append('image', imageFile);
+
+      var imgRes  = await fetch(BACKEND_URL + '/upload-image', { method: 'POST', body: formData });
+      if (!imgRes.ok) throw new Error('Image HTTP error: ' + imgRes.status);
+      var imgData = await imgRes.json();
+      if (!imgData.success) throw new Error(imgData.error);
+
+      var imageCID = imgData.imageCID;
+      showStatus('uploadStatus', 'info', '✅ Image uploaded: ' + imageCID + '\n\n📄 Step 2/2: Uploading metadata...');
+
+      // ── B: Upload metadata JSON ──
+      var metaRes  = await fetch(BACKEND_URL + '/upload-metadata', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:        name,
+          description: desc,
+          imageCID:    imageCID,
+          attributes:  [
+            { trait_type: 'Creator', value: 'Veerapandi Lakshmanan' },
+            { trait_type: 'LinkedIn',    value: 'https://www.linkedin.com/in/veerapandi-l-52059611/' }
+          ]
+        })
+      });
+      if (!metaRes.ok) throw new Error('Metadata HTTP error: ' + metaRes.status);
+      var metaData = await metaRes.json();
+      if (!metaData.success) throw new Error(metaData.error);
+
+      var tokenURI = metaData.tokenURI;
+
+      // ── C: Save to localStorage ──
+      // WHY localStorage? Mint runs as a separate action later.
+      // This data persists even if user refreshes the page.
+      var stored = {
+        name:      name,
+        imageCID:  imageCID,
+        tokenURI:  tokenURI,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(stored));
+
+      showStatus('uploadStatus', 'success',
+        '🎉 IPFS Upload Complete!\n' +
+        'Image CID : ' + imageCID + '\n' +
+        'Token URI : ' + tokenURI + '\n\n' +
+        '✅ Saved to localStorage. Now connect wallet and mint.'
+      );
+
+      markStepDone(1);
+      renderStoredData(stored);
+      updateMintReadiness();
+
+      document.getElementById('uploadBadge').textContent = 'DONE ✓';
+      document.getElementById('uploadBadge').classList.add('done-badge');
+      uploadBtn.innerHTML = '✅ Uploaded — Re-upload';
+      uploadBtn.disabled  = false;
+
+    } catch (err) {
+      showStatus('uploadStatus', 'error', '✗ Upload failed: ' + err.message);
+      uploadBtn.innerHTML = 'Upload to IPFS via Pinata';
+      uploadBtn.disabled  = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // RESTORE LOCALSTORAGE ON PAGE LOAD
+  // WHY? If user already uploaded, skip that step
+  // and go straight to mint
+  // ═══════════════════════════════════════════
+  function restoreFromLocalStorage() {
+    var stored = getStoredData();
+    if (!stored) return;
+
+    // Pre-fill name field
+    if (stored.name) document.getElementById('nftName').value = stored.name;
+
+    renderStoredData(stored);
+    markStepDone(1);
+
+    document.getElementById('uploadBadge').textContent = 'DONE ✓';
+    document.getElementById('uploadBadge').classList.add('done-badge');
+    uploadBtn.innerHTML = '✅ Uploaded — Re-upload';
+  }
+
+  // ── Render stored data inside verify card ──
+  function renderStoredData(stored) {
+    var verifyCard = document.getElementById('verifyCard');
+    var preview    = document.getElementById('storedDataPreview');
+    var badge      = document.getElementById('verifyBadge');
+    var date       = stored.timestamp ? new Date(stored.timestamp).toLocaleString() : '-';
+
+    preview.innerHTML =
+      '<div class="stored-preview">' +
+        '<span>NFT NAME  </span> ' + esc(stored.name || '-') + '<br>' +
+        '<span>IMAGE CID </span> ' + esc(stored.imageCID)    + '<br>' +
+        '<span>TOKEN URI </span> ' + esc(stored.tokenURI)    + '<br>' +
+        '<span>SAVED AT  </span> ' + esc(date) +
+      '</div>';
+
+    verifyCard.classList.remove('disabled-card');
+    verifyCard.classList.add('active-card');
+    badge.textContent = 'STORED ✓';
+    badge.classList.add('done-badge');
+    clearBtn.style.display = 'block';
+    markStepDone(2);
+    updateMintReadiness();
+  }
+
+  // ── Clear localStorage & reset UI ──
+  function clearStoredData() {
+    if (!confirm('Clear stored IPFS data? You will need to re-upload.')) return;
+    localStorage.removeItem(LS_KEY);
+
+    var verifyCard = document.getElementById('verifyCard');
+    document.getElementById('storedDataPreview').innerHTML = '';
+    verifyCard.classList.add('disabled-card');
+    verifyCard.classList.remove('active-card');
+    document.getElementById('verifyBadge').textContent = 'WAITING';
+    document.getElementById('verifyBadge').classList.remove('done-badge');
+    clearBtn.style.display = 'none';
+
+    resetStep(2);
+    resetStep(3);
+    updateMintReadiness();
+  }
+
+  // ═══════════════════════════════════════════
+  // CONNECT METAMASK
+  // ═══════════════════════════════════════════
+  async function connectWallet() {
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        alert('MetaMask not found! Install from https://metamask.io');
+        return;
+      }
+
+      connectBtn.textContent = 'Connecting...';
+      connectBtn.disabled    = true;
+
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+      var provider = new ethers.BrowserProvider(window.ethereum);
+      userSigner   = await provider.getSigner();
+      userAddress  = await userSigner.getAddress();
+      isConnected  = true;
+
+      var short = userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+      document.getElementById('walletAddr').textContent = short;
+      document.getElementById('walletDot').classList.add('connected');
+      connectBtn.textContent = 'Connected';
+      connectBtn.disabled    = false;
+
+      // ── After wallet connects: verify ERC-721 contract ──
+      await verifyERC721();
+      updateChecks();
+      updateMintReadiness();
+
+    } catch (err) {
+      connectBtn.textContent = 'Connect MetaMask';
+      connectBtn.disabled    = false;
+
+      if (err.code === 4001) {
+        alert('Connection rejected. Please try again.');
+      } else if (err.code === -32002) {
+        alert('MetaMask popup already open. Check your MetaMask extension.');
+      } else {
+        alert('Connect failed: ' + err.message);
+      }
+    }
+  }
+
+  async function checkExistingWallet() {
+    try {
+      if (typeof window.ethereum === 'undefined') return;
+      var accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts.length > 0) await connectWallet();
+    } catch (e) {}
+  }
+
+  // ═══════════════════════════════════════════
+  // VERIFY ERC-721 CONTRACT
+  // Runs automatically after wallet connects.
+  // WHY? Confirms the contract:
+  //   1. Exists on the blockchain (has code)
+  //   2. Supports ERC-721 interface (0x80ac58cd)
+  // This prevents wasted gas on wrong contracts.
+  // ═══════════════════════════════════════════
+  async function verifyERC721() {
+    if (!isConnected || !contractAddress || !contractABI) return;
+
+    try {
+      var provider = new ethers.BrowserProvider(window.ethereum);
+
+      // Check contract bytecode exists at address
+      var code = await provider.getCode(contractAddress);
+      if (code === '0x') {
+        isERC721Valid = false;
+        setCheck('chkERC721', false, '✗ No contract at address');
+        return;
+      }
+
+      // supportsInterface(0x80ac58cd) = ERC-721 standard check
+      var iface   = ["function supportsInterface(bytes4 id) view returns (bool)"];
+      var checker = new ethers.Contract(contractAddress, iface, provider);
+      isERC721Valid = await checker.supportsInterface('0x80ac58cd');
+
+    } catch (err) {
+      console.warn('ERC-721 verify failed:', err.message);
+      isERC721Valid = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // UPDATE CHECKLIST UI
+  // ═══════════════════════════════════════════
+  function updateChecks() {
+    setCheck('chkWallet', isConnected,
+      isConnected
+        ? '✓ ' + userAddress.slice(0,6) + '...' + userAddress.slice(-4)
+        : '✗ Not connected');
+
+    setCheck('chkAddress', !!contractAddress,
+      contractAddress
+        ? '✓ ' + contractAddress.slice(0,6) + '...' + contractAddress.slice(-4)
+        : '✗ Not loaded');
+
+    setCheck('chkABI', !!contractABI,
+      contractABI
+        ? '✓ Loaded (' + contractABI.length + ' items)'
+        : '✗ Not loaded');
+
+    setCheck('chkERC721', isERC721Valid,
+      isERC721Valid ? '✓ ERC-721 Confirmed' : '✗ Not verified');
+
+    var stored = getStoredData();
+    setCheck('chkIPFS', !!stored,
+      stored ? '✓ tokenURI ready' : '✗ Upload first');
+  }
+
+  function setCheck(id, ok, label) {
+    var el      = document.getElementById(id);
+    el.textContent = label;
+    el.className   = 'check-val ' + (ok ? 'ok' : 'fail');
+  }
+
+  // ═══════════════════════════════════════════
+  // UNLOCK MINT CARD
+  // Only unlocks when ALL 5 checks pass:
+  // wallet + address + ABI + ERC721 + IPFS data
+  // ═══════════════════════════════════════════
+  function updateMintReadiness() {
+    var stored   = getStoredData();
+    var allReady = isConnected && contractAddress && contractABI && isERC721Valid && !!stored;
+
+    var mintCard  = document.getElementById('mintCard');
+    var mintBadge = document.getElementById('mintBadge');
+
+    updateChecks();
+
+    if (allReady) {
+      mintCard.classList.remove('disabled-card');
+      mintCard.classList.add('active-card');
+      mintBtn.disabled      = false;
+      mintBadge.textContent = 'READY';
+      mintBadge.classList.add('done-badge');
+      markStepActive(3);
+    } else {
+      mintCard.classList.add('disabled-card');
+      mintCard.classList.remove('active-card');
+      mintBtn.disabled      = true;
+      mintBadge.textContent = 'LOCKED';
+      mintBadge.classList.remove('done-badge');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // STEP 2: MINT NFT
+  // Reads tokenURI from localStorage — no re-upload.
+  // Mint button only becomes clickable after all
+  // 5 checklist items are green.
+  // ═══════════════════════════════════════════
+  // ═══════════════════════════════════════════
+    // STEP 2: MINT NFT
+    // WHY mint(quantity) only? Your contract auto-assigns
+    // tokenId and mints to msg.sender directly.
+    // No address or tokenURI needed as arguments.
+    // ═══════════════════════════════════════════
+    async function mintNFT() {
+        var stored = getStoredData();
+        if (!stored)                     return showStatus('mintStatus', 'error', '✗ No IPFS data. Please upload first.');
+        if (!isConnected || !userSigner) return showStatus('mintStatus', 'error', '✗ Connect MetaMask first.');
+
+        mintBtn.disabled  = true;
+        mintBtn.innerHTML = '<span class="spinner"></span>Checking contract...';
+        showStatus('mintStatus', 'info', '⛓️ Reading contract data...');
+
+        try {
+            // Build contract instance using ABI + address loaded from backend
+            var nftContract = new ethers.Contract(contractAddress, contractABI, userSigner);
+
+            // ── Read live data from contract before minting ──
+            // WHY? Verify supply + wallet limits before spending gas
+            var mintPrice     = await nftContract.mintPrice();                   // returns wei e.g. 10000000000000000
+            var nextTokenId   = await nftContract.nextTokenId();                 // current next token to be minted
+            var maxPerWallet  = await nftContract.maxPerWallet();                // max 5 per wallet
+            var alreadyMinted = await nftContract.mintedPerWallet(userAddress);  // how many THIS wallet already minted
+
+            var quantity  = BigInt(1);              // mint 1 NFT at a time
+            var totalCost = mintPrice * quantity;   // 0.01 ETH * 1 = 0.01 ETH in wei
+
+            // ── Wallet limit check ──
+            if (alreadyMinted >= maxPerWallet) {
+            return showStatus('mintStatus', 'error',
+                '✗ Wallet limit reached!\n' +
+                'Already minted: ' + alreadyMinted.toString() + '/' + maxPerWallet.toString()
+            );
+            }
+
+            // ── Supply check ──
+            if (nextTokenId >= BigInt(1000)) {
+            return showStatus('mintStatus', 'error', '✗ Sold out! All 1000 NFTs minted.');
+            }
+
+            // ── Show mint summary before MetaMask popup ──
+            showStatus('mintStatus', 'info',
+            '📋 Mint Summary:\n' +
+            'Token ID (next) : #' + nextTokenId.toString() + '\n' +
+            'Cost            : ' + ethers.formatEther(totalCost) + ' ETH\n' +
+            'Wallet minted   : ' + alreadyMinted.toString() + '/' + maxPerWallet.toString() + '\n\n' +
+            '⏳ Please confirm in MetaMask...'
+            );
+
+            // ── Call mint(quantity) — send ETH value along ──
+            // WHY only quantity? Contract takes only (uint256 quantity)
+            // WHY value? Contract is payable — requires 0.01 ETH per NFT
+            // WHY NOT tokenURI? Contract uses shared baseURI set at deploy
+            var tx = await nftContract.mint(quantity, {
+            value: totalCost    // ← ETH sent with transaction
+            });
+
+            showStatus('mintStatus', 'info',
+            '⏳ Transaction submitted!\n' +
+            'Hash: ' + tx.hash + '\n' +
+            'Waiting for confirmation...'
+            );
+
+            // Wait 1 block confirmation
+            var receipt = await tx.wait(1);
+
+            // Token ID that was minted = nextTokenId value BEFORE this mint
+            var mintedTokenId = nextTokenId.toString();
+
+            // Clear localStorage — mint is complete
+            localStorage.removeItem(LS_KEY);
+
+            showStatus('mintStatus', 'success',
+            '🎉 NFT Minted Successfully!\n\n' +
+            'Token ID  : #' + mintedTokenId + '\n' +
+            'ETH Paid  : ' + ethers.formatEther(totalCost) + ' ETH\n' +
+            'Tx Hash   : ' + receipt.hash + '\n' +
+            'Etherscan : https://sepolia.etherscan.io/tx/' + receipt.hash
+            );
+
+            markStepDone(3);
+            mintBtn.innerHTML = '✅ NFT Minted!';
+
+        } catch (err) {
+            console.error('Mint error:', err);
+
+            // ── Match exact require() messages from your contract ──
+            var msg = err.message || '';
+
+            if (err.code === 4001) {
+            showStatus('mintStatus', 'error', '✗ You rejected the transaction.');
+            } else if (msg.includes('Insufficient ETH')) {
+            showStatus('mintStatus', 'error', '✗ Not enough ETH. Need 0.01 ETH per NFT.');
+            } else if (msg.includes('Wallet limit exceeded')) {
+            showStatus('mintStatus', 'error', '✗ Wallet limit exceeded. Max 5 NFTs per wallet.');
+            } else if (msg.includes('Sold out')) {
+            showStatus('mintStatus', 'error', '✗ Sold out! All 1000 NFTs minted.');
+            } else if (msg.includes('Invalid quantity')) {
+            showStatus('mintStatus', 'error', '✗ Invalid quantity.');
+            } else {
+            showStatus('mintStatus', 'error', '✗ Error: ' + msg);
+            }
+
+            mintBtn.innerHTML = 'Mint NFT on Blockchain';
+            mintBtn.disabled  = false;
+        }
+    }
+
+  // ═══════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════
+
+  function getStoredData() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; }
+    catch (e) { return null; }
+  }
+
+  function showStatus(id, type, msg) {
+    var el      = document.getElementById(id);
+    el.textContent = msg;
+    el.className   = 'status-box visible ' + type;
+  }
+
+  function markStepDone(n) {
+    document.getElementById('step' + n).classList.remove('active');
+    document.getElementById('step' + n).classList.add('done');
+    if (n < 3) document.getElementById('step' + (n+1)).classList.add('active');
+  }
+
+  function markStepActive(n) {
+    document.getElementById('step' + n).classList.add('active');
+  }
+
+  function resetStep(n) {
+    document.getElementById('step' + n).classList.remove('done', 'active');
+  }
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+});
+</script>
+</body>
+</html>
